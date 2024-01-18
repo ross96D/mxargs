@@ -1,0 +1,5 @@
+version: 3
+tasks:
+  build:
+    - go build -o ./out/bin/mxargs .
+    - cp ./out/bin/mxargs /home/abelardo/.bin/mxargs

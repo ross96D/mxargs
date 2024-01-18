@@ -30,12 +30,12 @@ func Execute(cmd *exec.Cmd, args []string) {
 		cmd2 := *cmd
 		cmd2.Args = append(cmd2.Args, args[i])
 		go func(cmd exec.Cmd) {
-			println("ZZ", cmd.String())
+			// println("ZZ", cmd.String())
 			var b []byte
 			buff := bytes.NewBuffer(b)
 			r, _ := cmd.StdoutPipe()
 			go io.Copy(buff, r)
-			// cmd.Run()
+			cmd.Run()
 			r.Close()
 			p.print(buff)
 			w.Done()
