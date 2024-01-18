@@ -5,8 +5,11 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 
+	"github.com/ross96D/mxargs/execute"
 	"github.com/spf13/cobra"
 )
 
@@ -22,9 +25,23 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("must be at least 1 argument")
+		}
+		return nil
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("%d\n", len(args))
-		// Execute()
+		var mcmd *exec.Cmd
+		if len(args) > 1 {
+			mcmd = exec.Command(args[0], args[1:]...)
+		} else {
+			mcmd = exec.Command(args[0])
+		}
+		_ = mcmd
+
+		argsss := stdin()
+		execute.Execute(mcmd, argsss)
 	},
 }
 
@@ -47,4 +64,24 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func stdin() []string {
+	stdin := os.Stdin
+	b, err := io.ReadAll(stdin)
+	if err != nil {
+		return []string{}
+	}
+	resp := make([]string, 0)
+
+	buff := make([]byte, 0, len(b))
+	for i := 0; i < len(b); i++ {
+		if b[i] == 0 {
+			resp = append(resp, string(buff))
+			buff = buff[0:0]
+			continue
+		}
+		buff = append(buff, b[i])
+	}
+	return resp
 }
