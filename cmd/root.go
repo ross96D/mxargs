@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sync"
 
 	"github.com/ross96D/mxargs/execute"
 	"github.com/spf13/cobra"
@@ -40,8 +41,11 @@ to quickly create a Cobra application.`,
 		}
 		_ = mcmd
 
+		var p = execute.Print{
+			Mut: &sync.Mutex{},
+		}
 		argsss := stdin()
-		execute.Execute(mcmd, argsss)
+		execute.Execute(&p, mcmd, argsss)
 	},
 }
 

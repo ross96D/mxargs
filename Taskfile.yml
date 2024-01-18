@@ -3,3 +3,6 @@ tasks:
   build:
     - go build -o ./out/bin/mxargs .
     - cp ./out/bin/mxargs /home/abelardo/.bin/mxargs
+  build:race:
+    - go build --race -o ./out/bin/mxargs .
+    - cp ./out/bin/mxargs /home/abelardo/.bin/mxargs
