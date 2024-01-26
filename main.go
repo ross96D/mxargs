@@ -28,7 +28,7 @@ func main() {
 		Mut: &sync.Mutex{},
 	}
 	argsss := stdin()
-	execute.Execute(&p, mcmd, argsss)
+	execute.Execute(&p, args, argsss)
 }
 
 func stdin() []string {
