@@ -3,15 +3,14 @@ package ordering
 import (
 	"io"
 	"sync"
-
-	"github.com/ross96D/mxargs/shared/priority_queue"
 )
 
 type Ordering struct {
-	queue    priority_queue.PriorityQueue[io.Reader]
-	_current *priority_queue.Item[io.Reader]
+	queue    PriorityQueue[io.Reader]
+	_current *Item[io.Reader]
 
-	mut sync.Mutex
+	mut     sync.Mutex
+	readMut sync.Mutex
 
 	// this marks that all elements have been processing and will not add more elements
 	end bool
@@ -23,7 +22,7 @@ type Ordering struct {
 func New() *Ordering {
 	condMutex := sync.Mutex{}
 	return &Ordering{
-		queue: make(priority_queue.PriorityQueue[io.Reader], 0),
+		queue: make(PriorityQueue[io.Reader], 0),
 		mut:   sync.Mutex{},
 		wait:  *sync.NewCond(&condMutex),
 	}
@@ -39,32 +38,36 @@ func (o *Ordering) Add(tag int, reader io.Reader, last bool) {
 
 	o.end = last
 
-	item := priority_queue.NewItem(reader, tag)
+	item := NewItem(reader, tag)
 	o.queue.Push(item)
 	o.wait.Signal()
 }
 
-func (o *Ordering) setCurrent(current *priority_queue.Item[io.Reader]) {
+func (o *Ordering) setCurrent(current *Item[io.Reader]) {
 	o.mut.Lock()
 	defer o.mut.Unlock()
 
 	o._current = current
 }
 
-func (o *Ordering) pop() (priority_queue.Item[io.Reader], error) {
+func (o *Ordering) pop() (Item[io.Reader], error) {
 	o.mut.Lock()
 	defer o.mut.Unlock()
 
 	if o.queue.Len() == 0 {
 		if o.end {
-			return priority_queue.Item[io.Reader]{}, io.EOF
+			return Item[io.Reader]{}, io.EOF
 		}
 		o.mut.Unlock()
+
 		// waits for the next element
+		o.wait.L.Lock()
 		o.wait.Wait()
+		o.wait.L.Unlock()
+
 		o.mut.Lock()
 	}
-	item := o.queue.Pop().(priority_queue.Item[io.Reader])
+	item := o.queue.Pop().(Item[io.Reader])
 	// o.mut.Unlock()
 	return item, nil
 }

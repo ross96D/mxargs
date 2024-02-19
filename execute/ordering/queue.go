@@ -1,4 +1,4 @@
-package priority_queue
+package ordering
 
 // An Item is something we manage in a priority queue.
 type Item[T any] struct {
@@ -14,6 +14,10 @@ func NewItem[T any](value T, priority int) Item[T] {
 
 func (i Item[T]) Value() T {
 	return i.value
+}
+
+func (i Item[T]) Priority() int {
+	return i.priority
 }
 
 // A PriorityQueue implements heap.Interface and holds Items.

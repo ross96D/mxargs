@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sync"
 
 	"github.com/ross96D/mxargs/execute"
 )
@@ -24,11 +23,11 @@ func main() {
 	}
 	_ = mcmd
 
-	var p = execute.Print{
-		Mut: &sync.Mutex{},
-	}
+	// var p = execute.Print{
+	// 	Mut: &sync.Mutex{},
+	// }
 	argsss := stdin()
-	execute.Execute(&p, args, argsss)
+	execute.ExecuteWithOrder(args, argsss)
 }
 
 func stdin() []string {
