@@ -5,7 +5,7 @@ import (
 )
 
 func TestXxx(t *testing.T) {
-	_, err := size()
+	_, err := maxChars()
 	if err != nil {
 		t.Fatalf("err %s", err.Error())
 	}

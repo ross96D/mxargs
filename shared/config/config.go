@@ -1,94 +1,167 @@
 package config
 
 import (
+	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
-	"os/exec"
-	"strconv"
+	"io"
+	"os"
+
+	"github.com/ross96D/mxargs/shared/flags"
+	sysconf "github.com/tklauser/go-sysconf"
 )
 
 const (
 	maxSize = 128 * 1024
 )
 
-type config struct {
-	// Input items are terminated by a null character instead of by whitespace, and the quotes and backslash are not special (every character is taken literally).
-	// Disables the end of file string, which is treated like any other argument. Useful when input items might contain white space, quote marks, or backslashes.
-	// The GNU find -print0 option produces input suitable for this mode.
-	NullSeparator bool
+type Configuration struct {
+	Input io.Reader
+	//! xargs made as default spaces and new lines... now this only handles one case.
+	Delimeter byte
+	sc        *bufio.Scanner
+	text      string
+	peeked    bool
 
-	// Read items from file instead of standard input. If you use this option, stdin remains unchanged when commands are run. Otherwise, stdin is redirected
-	// from /dev/null.
-	File string
-
-	// Input items are terminated by the specified character. The specified delimiter may be a single character, a C-style character escape such as \n, or an oc‐
-	// tal or hexadecimal escape code. Octal and hexadecimal escape codes are understood as for the printf command.  Multibyte characters are not supported.
-	// When processing the input, quotes and backslash are not special; every character in the input is taken literally. The -d option disables any end-of-file
-	// string, which is treated like any other argument. You can use this option when the input consists of simply newline-separated items, although it is almost
-	// always better to design your program to use --null where this is possible.
-	Delimiter string
-
-	// Set the end of file string to eof-str.  If the end of file string occurs as a line of input, the rest of the input is ignored
-	EOL bool
-
-	// Use at most max-args arguments per command line. Fewer than max-args arguments will be used if the size (see the -s option) is exceeded, unless the -x op‐
-	// tion is given, in which case xargs will exit.
 	MaxArgs int
 
-	// Use at most max-chars characters per command line, including the command and initial-arguments and the terminating nulls at the ends of the argument
-	// strings. The largest allowed value is system-dependent, and is calculated as the argument length limit for exec, less the size of your environment, less
-	// 2048 bytes of headroom. If this value is more than 128KiB, 128KiB is used as the default value; otherwise, the default value is the maximum. 1KiB is 1024
-	// bytes.
-	Size int
+	MaxChars int64
 
-	// Exit if the size (see the -s option) is exceeded.
-	Exit bool
-
-	// Print the command line on the standard error output before executing it.
-	Verbose bool
+	EOF string
 }
 
-var configuration config
+func New(flags *flags.CmdFlags, input io.Reader) (conf *Configuration, err error) {
+	conf = new(Configuration)
 
-func Config() *config {
-	return &configuration
-}
+	if flags.FilePath != "" {
+		var f *os.File
+		f, err = os.Open(flags.FilePath)
+		if err != nil {
+			return
+		}
+		conf.Input = f
+	} else {
+		if input == nil {
+			err = errors.New("new_config: no input reader supplied")
+			return
+		}
+		conf.Input = input
+	}
 
-func Init() (err error) {
-	if configuration.Size, err = size(); err != nil {
+	conf.Delimeter = flags.Delimiter[0]
+	if conf.Delimeter == 0 {
+		conf.Delimeter = '\n'
+	}
+	if flags.NullSeparator {
+		conf.Delimeter = 0
+	}
+
+	conf.MaxArgs = flags.MaxArgs
+
+	if conf.MaxChars, err = maxChars(); err != nil {
 		return
 	}
+	if flags.MaxChars != 0 {
+		if flags.MaxChars > uint64(conf.MaxArgs) {
+			err = fmt.Errorf("max number of character %d surpased", conf.MaxChars)
+			return
+		}
+		conf.MaxChars = int64(flags.MaxChars)
+	}
+
+	// initialize the scanner
+	conf.scanner()
 	return
 }
 
-func size() (int, error) {
-	cmd := exec.Command("getconf", "ARG_MAX")
-	argMax, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("getconf %w", err)
-	}
+func (m *Configuration) splitFunc() bufio.SplitFunc {
+	return func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
 
-	if argMax[len(argMax)-1] == '\n' {
-		argMax = argMax[:len(argMax)-1]
-	}
+		if i := bytes.IndexByte(data, m.Delimeter); i >= 0 {
+			return i + 1, data[0:i], nil
+		}
 
-	max, err := strconv.Atoi(string(argMax))
+		// TODO check if this stop
+		// If we're at EOF, we have a final, non-terminated line. Return it.
+		if atEOF {
+			return len(data), data, nil
+		}
+		return
+	}
+}
+
+func (m *Configuration) scanner() {
+	sc := bufio.NewScanner(m.Input)
+	sc.Split(m.splitFunc())
+	m.sc = sc
+}
+
+func (m *Configuration) scan() bool {
+	//!!!! TODO this need refactor.......
+	if m.peeked {
+		m.peeked = false
+		return true
+	}
+	next := m.sc.Scan()
+	text := m.sc.Text()
+	if m.EOF != "" && m.text == m.EOF {
+		return false
+	}
+	m.text = text
+	return next
+}
+
+func (m *Configuration) HasMoreData() bool {
+	//!!!! TODO this need refactor.......
+	resp := m.scan()
+	m.peeked = true
+	return resp
+}
+
+func (m *Configuration) Text() string {
+	text := m.text
+	m.text = ""
+	return text
+}
+
+func (m *Configuration) Args() ([]string, error) {
+	//! cannot use MaxArgs because it could be a number too big
+	resp := make([]string, 0)
+	for range m.MaxArgs {
+		if m.scan() {
+			resp = append(resp, m.Text())
+		} else {
+			text := m.Text()
+			if text != "" {
+				resp = append(resp, text)
+			}
+			return resp, io.EOF
+		}
+	}
+	return resp, nil
+}
+
+var configuration Configuration
+
+func Config() *Configuration {
+	return &configuration
+}
+
+func maxChars() (int64, error) {
+	max, err := sysconf.Sysconf(sysconf.SC_ARG_MAX)
+
 	if err != nil {
 		return 0, err
 	}
 
-	cmd = exec.Command("sh", "-c", "printf \"%s\" \"$(env)\" | wc -c")
-	env, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("sh -c printf \"%%s\" \"$(env)\" | wc -c %w", err)
-	}
-
-	if env[len(env)-1] == '\n' {
-		env = env[:len(env)-1]
-	}
-
-	envsize, err := strconv.Atoi(string(env))
-	if err != nil {
-		return 0, err
+	var envsize int64 = 0
+	envs := os.Environ()
+	for _, env := range envs {
+		envsize += int64(len(env)) + 1
 	}
 
 	result := (max - envsize - 2048)

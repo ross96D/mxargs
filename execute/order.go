@@ -10,10 +10,12 @@ import (
 	"sync"
 
 	"github.com/ross96D/mxargs/execute/ordering"
+	"github.com/ross96D/mxargs/shared/config"
 	"golang.org/x/sync/errgroup"
 )
 
-func ExecuteWithOrder(cmd []string, args []string) {
+// ! test if passing a command (not a reference, a value, to avoid concurrency problems) insted of the slice of string works
+func ExecuteWithOrder(cmd []string, conf *config.Configuration) {
 	w := sync.WaitGroup{}
 
 	ctx := context.Background()
@@ -33,26 +35,34 @@ func ExecuteWithOrder(cmd []string, args []string) {
 		w.Done()
 	}()
 
-	N := len(args)
-	for i := 0; i < N; i++ {
+	var isLast bool
+	for i := 0; true; i++ {
 		w.Add(1)
-		cmd2 := exec.Command(cmd[0], cmd[1:]...)
-		cmd2.Args = append(cmd2.Args, args[i])
+		command := exec.Command(cmd[0], cmd[1:]...)
+		args, err := conf.Args()
+		isLast = conf.HasMoreData()
+		if err != nil {
+			isLast = true
+			if len(args) == 0 {
+				break
+			}
+		}
+		command.Args = append(command.Args, args...)
 
-		g.Go(func(cmd exec.Cmd, index int) func() error {
+		g.Go(func(cmd exec.Cmd, index int, isLast bool) func() error {
 			return func() error {
 				// chain stdout
 				b := make([]byte, 0, 1024)
 				bufferOut := bytes.NewBuffer(b)
 				mout := &BufferTreadSafe{buffer: bufferOut}
-				orderedStdout.Add(index, mout, index == N-1)
+				orderedStdout.Add(index, mout, isLast)
 				cmd.Stdout = mout
 
 				// chain stderr
 				b = make([]byte, 0, 1024)
 				bufferErr := bytes.NewBuffer(b)
 				merr := &BufferTreadSafe{buffer: bufferErr}
-				orderedStderr.Add(index, merr, index == N-1)
+				orderedStderr.Add(index, merr, isLast)
 				cmd.Stderr = bufferErr
 
 				//! TODO handle error
@@ -62,7 +72,11 @@ func ExecuteWithOrder(cmd []string, args []string) {
 				w.Done()
 				return nil
 			}
-		}(*cmd2, i))
+		}(*command, i, isLast))
+
+		if isLast {
+			break
+		}
 	}
 	w.Wait()
 }

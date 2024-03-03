@@ -29,7 +29,7 @@ func (p *Print) print(m *MWriter) error {
 	return nil
 }
 
-func Execute(print *Print, cmd []string, args []string) {
+func ExecuteWithOutOrder(print *Print, cmd []string, args []string) {
 	w := sync.WaitGroup{}
 
 	ctx := context.Background()
