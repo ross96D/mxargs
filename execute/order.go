@@ -40,7 +40,7 @@ func ExecuteWithOrder(cmd []string, conf *config.Configuration) {
 		w.Add(1)
 		command := exec.Command(cmd[0], cmd[1:]...)
 		args, err := conf.Args()
-		isLast = conf.HasMoreData()
+		isLast = !conf.HasMoreData()
 		if err != nil {
 			isLast = true
 			if len(args) == 0 {
