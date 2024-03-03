@@ -9,3 +9,4 @@ so i made this.. maybe i make it more complete to replace xargs in my workflow, 
 # TODO
 - [] Should work well with the -n argument of xargs. The default behaviour should be 1 call and set all arguments to the call
 - [] Take into account max len of the arguments and act accordingly
+- [] Change cobra for a cli framework that accepts shorthands of more the one character. (Maybe the easiest one is make a fork)
